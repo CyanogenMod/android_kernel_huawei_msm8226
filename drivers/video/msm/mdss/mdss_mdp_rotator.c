@@ -484,12 +484,6 @@ int mdss_mdp_rotator_setup(struct msm_fb_data_type *mfd,
 			goto rot_err;
 		}
 
-		if (work_busy(&rot->commit_work)) {
-			mutex_unlock(&rotator_lock);
-			flush_work(&rot->commit_work);
-			mutex_lock(&rotator_lock);
-		}
-
 		if (rot->format != fmt->format)
 			format_changed = true;
 
