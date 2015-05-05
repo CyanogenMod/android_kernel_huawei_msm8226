@@ -4,15 +4,36 @@ ccflags-y += -Idrivers/media/platform/msm/camera_v2/camera
 ccflags-y += -Idrivers/media/platform/msm/camera_v2/sensor/io
 ccflags-y += -Idrivers/media/platform/msm/camera_v2/sensor/cci
 obj-$(CONFIG_MSMB_CAMERA) += cci/ io/ csiphy/ csid/ actuator/ flash/ eeprom/
-obj-$(CONFIG_MSM_CAMERA_SENSOR) += msm_sensor_init.o msm_sensor_driver.o msm_sensor.o
+obj-$(CONFIG_MSM_CAMERA_SENSOR) += msm_sensor.o
+obj-$(CONFIG_S5K3L1YX) += s5k3l1yx.o
+obj-$(CONFIG_IMX135) += imx135.o
 obj-$(CONFIG_IMX134) += imx134.o
 obj-$(CONFIG_OV8825) += ov8825.o
 obj-$(CONFIG_OV8865) += ov8865.o
 obj-$(CONFIG_s5k4e1) += s5k4e1.o
 obj-$(CONFIG_OV12830) += ov12830.o
+obj-$(CONFIG_OV2720) += ov2720.o
 obj-$(CONFIG_OV9724) += ov9724.o
 obj-$(CONFIG_HI256) += hi256.o
 obj-$(CONFIG_OV5648) += ov5648.o
 obj-$(CONFIG_MT9M114) += mt9m114.o
 obj-$(CONFIG_SP1628) += sp1628.o
 obj-$(CONFIG_GC0339) += gc0339.o
+obj-$(CONFIG_HW_IMX135) += hw_imx135.o
+obj-$(CONFIG_HW_IMX134) += hw_imx134.o
+obj-$(CONFIG_HW_S5K4E1) += hw_s5k4e1.o
+obj-$(CONFIG_HW_OV5648) += hw_ov5648.o
+obj-$(CONFIG_HW_HI542) += hw_hi542.o
+obj-$(CONFIG_HW_S5K4E1_BACK) += hw_s5k4e1_back.o
+obj-$(CONFIG_HW_OV5648_BACK) += hw_ov5648_back.o
+obj-$(CONFIG_HW_IMX219) += hw_imx219.o
+obj-$(CONFIG_HW_OV8858) += hw_ov8858.o
+
+obj-$(CONFIG_HW_OV9724) += hw_ov9724.o
+obj-$(CONFIG_HW_MT9V113) += hw_mt9v113.o
+obj-$(CONFIG_HW_BF3905_BYD) += hw_bf3905_byd.o
+obj-$(CONFIG_HW_S5K9A1) += hw_s5k9a1.o
+obj-$(CONFIG_HW_MT9D015) += hw_mt9d015.o
+obj-$(CONFIG_HW_OV2680) += hw_ov2680.o
+#/*delete one line*/
+
