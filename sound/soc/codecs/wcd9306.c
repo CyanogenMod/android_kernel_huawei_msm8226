@@ -1184,6 +1184,7 @@ static const struct snd_kcontrol_new tapan_common_snd_controls[] = {
 	SOC_ENUM_EXT("LOOPBACK Mode", tapan_loopback_mode_ctl_enum[0],
 		tapan_loopback_mode_get, tapan_loopback_mode_put),
 
+    /* change the max value from 14 to 20 as WCD9302 Software Interface described */
 	SOC_SINGLE_TLV("HPHL Volume", TAPAN_A_RX_HPH_L_GAIN, 0, 20, 1,
 		line_gain),
 	SOC_SINGLE_TLV("HPHR Volume", TAPAN_A_RX_HPH_R_GAIN, 0, 20, 1,

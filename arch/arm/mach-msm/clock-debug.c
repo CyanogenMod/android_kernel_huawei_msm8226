@@ -249,7 +249,10 @@ static int clock_debug_print_clock(struct clk *c, struct seq_file *m)
 
 	if (!c || !c->prepare_count)
 		return 0;
-
+#ifdef CONFIG_HUAWEI_KERNEL
+	if (1 == debug_suspend)
+		goto out;
+#endif
 	clock_debug_output(m, 0, "\t");
 	do {
 		if (c->vdd_class)
@@ -264,7 +267,9 @@ static int clock_debug_print_clock(struct clk *c, struct seq_file *m)
 	} while ((c = clk_get_parent(c)));
 
 	clock_debug_output(m, 1, "\n");
-
+#ifdef CONFIG_HUAWEI_KERNEL
+out:
+#endif
 	return 1;
 }
 

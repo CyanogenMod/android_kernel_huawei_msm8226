@@ -723,4 +723,35 @@ config SENSORS_CAPELLA_CM36283
 	  To compile this driver as a module, choose M here: the
 	  module will be called CM36283.
 
+config INPUT_AD7146
+        tristate "AD7146 Sensor Support"
+	depends on I2C
+	default M
+        help
+          Say Y here if you have AD7146 hooked to a I2C bus.
+	  To compile this driver as a module, choose M here:the module
+          will be called ad7146.ko
+          Kindly select the available modes, from the list below.
+
+config STG_HYS
+	bool "To make the driver to add hysteresis compensation to the driver"
+	depends on INPUT_AD7146
+	default y
+	help
+	 To enable the Hysteresis compensation routine for the sensor active mode of operation. The user can modify the percentage of hysteresis by modifying the HYS_PERCENT.
+
+config NOSTG_CAL_LAST	
+	bool "To make the driver to write the stage calibration register in the same order"
+	depends on INPUT_AD7146
+	default n
+	help
+	  By default the hardware initialization will make the driver to write the STAGE_CAL_EN register at the end. This option over rides this driver operation, making the configuration to write in the same sequence provided.
+
+config AD7146_DEBUG
+	bool "To add the debug support of the driver"
+	depends on INPUT_AD7146
+	default n
+	help
+	To add the debug support of the driver in the build. Used in print the debug information on the console.  
+
 endif

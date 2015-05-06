@@ -1361,6 +1361,13 @@ int32_t qpnp_iadc_vadc_sync_read(struct qpnp_iadc_chip *iadc,
 		sign = 1;
 		num = -num;
 	}
+#ifdef CONFIG_HUAWEI_KERNEL
+	if((iadc->adc->calib.gain_raw - iadc->adc->calib.offset_raw) == 0)
+	{
+		pr_err("Error,gain comp is zero\n");
+		goto fail_release_vadc;
+	}
+#endif
 
 	i_result->result_uv = (num * QPNP_ADC_GAIN_NV)/
 		(iadc->adc->calib.gain_raw - iadc->adc->calib.offset_raw);

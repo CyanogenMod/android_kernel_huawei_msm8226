@@ -223,7 +223,46 @@
 #define KPDBL_MODULE_EN_MASK		0x80
 #define NUM_KPDBL_LEDS			4
 #define KPDBL_MASTER_BIT_INDEX		0
+/* Add dynamic_log interface */
+#define LED_ERR  1
+#define LED_INFO 2
+#define LED_DBG  3
 
+int led_debug_mask = LED_INFO ;
+module_param_named(led_debug_mask, led_debug_mask, int, 0664);
+
+#ifndef LED_LOG_ERR
+#define LED_LOG_ERR( x...)					\
+do{											\
+	if( led_debug_mask >= LED_ERR )			\
+	{										\
+		printk(KERN_ERR "[LED_ERR] " x);	\
+	}										\
+											\
+}while(0)
+#endif
+
+#ifndef LED_LOG_INFO
+#define LED_LOG_INFO( x...)					\
+do{											\
+	if( led_debug_mask >= LED_INFO )		\
+	{										\
+		printk(KERN_ERR "[LED_INFO] " x);	\
+	}										\
+											\
+}while(0)
+#endif
+
+#ifndef LED_LOG_DBG
+#define LED_LOG_DBG( x...)					\
+do{											\
+	if( led_debug_mask >= LED_DBG )			\
+	{										\
+		printk(KERN_ERR "[LED_DBG] " x);	\
+	}										\
+											\
+}while(0)
+#endif
 /**
  * enum qpnp_leds - QPNP supported led ids
  * @QPNP_ID_WLED - White led backlight
@@ -492,6 +531,10 @@ struct qpnp_led_data {
 	bool			default_on;
 	bool                    in_order_command_processing;
 	int			turn_off_delay_ms;
+#ifdef CONFIG_HUAWEI_KERNEL
+	u8			max_brightness;
+	u8			max_blink_brightness;
+#endif
 };
 
 static DEFINE_MUTEX(flash_lock);
@@ -701,12 +744,15 @@ static int qpnp_wled_set(struct qpnp_led_data *led)
 	}
 	return 0;
 }
-
+/* add the log dynamic control */
 static int qpnp_mpp_set(struct qpnp_led_data *led)
 {
 	int rc;
 	u8 val;
 	int duty_us, duty_ns, period_us;
+
+	LED_LOG_DBG(" %s begin, brightness:%d \n ", __func__, led->cdev.brightness);
+	LED_LOG_DBG(" led base add:0x%x \n", led->base);
 
 	if (led->cdev.brightness) {
 		if (led->cdev.brightness < led->mpp_cfg->min_brightness) {
@@ -716,6 +762,12 @@ static int qpnp_mpp_set(struct qpnp_led_data *led)
 			led->cdev.brightness = led->mpp_cfg->min_brightness;
 		}
 
+#ifdef CONFIG_HUAWEI_KERNEL
+		if (led->cdev.brightness > led->max_brightness) {
+			LED_LOG_DBG("brightness is more than supported, set to maximum supported\n");
+			led->cdev.brightness = led->max_brightness;
+		}
+#endif
 		if (led->mpp_cfg->pwm_mode != MANUAL_MODE) {
 			if (!led->mpp_cfg->pwm_cfg->blinking) {
 				led->mpp_cfg->pwm_cfg->mode =
@@ -725,6 +777,7 @@ static int qpnp_mpp_set(struct qpnp_led_data *led)
 			}
 		}
 		if (led->mpp_cfg->pwm_mode == PWM_MODE) {
+			LED_LOG_DBG(" %s no blink!\n", __func__);
 			/*config pwm for brightness scaling*/
 			period_us = led->mpp_cfg->pwm_cfg->pwm_period_us;
 			if (period_us > INT_MAX / NSEC_PER_USEC) {
@@ -752,11 +805,16 @@ static int qpnp_mpp_set(struct qpnp_led_data *led)
 		if (led->mpp_cfg->pwm_mode != MANUAL_MODE)
 			pwm_enable(led->mpp_cfg->pwm_cfg->pwm_dev);
 		else {
+			#ifdef CONFIG_HUAWEI_KERNEL
+			/* 0--5mA;  1--10mA; 2--15mA; 3--20mA; 
+			 * 4--25mA; 5--30mA; 6--35mA; 7--40mA; */
+			val = (led->mpp_cfg->current_setting / LED_MPP_CURRENT_MIN) - 1;
+			#else
 			if (led->cdev.brightness < LED_MPP_CURRENT_MIN)
 				led->cdev.brightness = LED_MPP_CURRENT_MIN;
 
 			val = (led->cdev.brightness / LED_MPP_CURRENT_MIN) - 1;
-
+			#endif
 			rc = qpnp_led_masked_write(led,
 					LED_MPP_SINK_CTRL(led->base),
 					LED_MPP_SINK_MASK, val);
@@ -977,6 +1035,13 @@ static int qpnp_flash_set(struct qpnp_led_data *led)
 	else
 		led->flash_cfg->current_prgm =
 			(val * FLASH_MAX_LEVEL / led->max_current);
+
+#ifndef CONFIG_HUAWEI_KERNEL
+	led->flash_cfg->current_prgm =
+		led->flash_cfg->current_prgm >> FLASH_CURRENT_PRGM_SHIFT;
+	if (!led->flash_cfg->current_prgm)
+		led->flash_cfg->current_prgm = FLASH_CURRENT_PRGM_MIN;
+#endif
 
 	/* Set led current */
 	if (val > 0) {
@@ -1440,6 +1505,12 @@ static int qpnp_rgb_set(struct qpnp_led_data *led)
 	int duty_us, duty_ns, period_us;
 
 	if (led->cdev.brightness) {
+#ifdef CONFIG_HUAWEI_KERNEL
+		if (led->cdev.brightness > led->max_brightness) {
+			LED_LOG_DBG("brightness is more than supported, set to maximum supported\n");
+			led->cdev.brightness = led->max_brightness;
+		}
+#endif
 		if (!led->rgb_cfg->pwm_cfg->blinking)
 			led->rgb_cfg->pwm_cfg->mode =
 				led->rgb_cfg->pwm_cfg->default_mode;
@@ -1526,10 +1597,14 @@ static void __qpnp_led_work(struct qpnp_led_data *led,
 {
 	int rc;
 
+	LED_LOG_DBG("__qpnp_led_work start!led id:%d \n", led->id);
+
 	if (led->id == QPNP_ID_FLASH1_LED0 || led->id == QPNP_ID_FLASH1_LED1)
 		mutex_lock(&flash_lock);
 	else
 		mutex_lock(&led->lock);
+
+	/*remove the code to qpnp_led_set according to 1.0 ES6 baseline*/
 
 	switch (led->id) {
 	case QPNP_ID_WLED:
@@ -1875,6 +1950,10 @@ static int qpnp_pwm_init(struct pwm_config_data *pwm_cfg,
 					"Exceed LUT limit\n");
 				return -EINVAL;
 			}
+			/*enable pwm before pwm look up table configuration*/
+#ifdef CONFIG_HUAWEI_KERNEL
+			pwm_enable(pwm_cfg->pwm_dev);
+#endif
 			rc = pwm_lut_config(pwm_cfg->pwm_dev,
 				pwm_cfg->pwm_period_us,
 				pwm_cfg->duty_cycles->duty_pcts,
@@ -2316,6 +2395,7 @@ restore:
 	return ret;
 }
 
+/* Use qcom function for setting led mode */
 static void led_blink(struct qpnp_led_data *led,
 			struct pwm_config_data *pwm_cfg)
 {
@@ -2340,8 +2420,12 @@ static void led_blink(struct qpnp_led_data *led,
 				led->kpdbl_cfg->pwm_mode =
 						pwm_cfg->default_mode;
 		}
+#ifndef CONFIG_HUAWEI_KERNEL
+		/*for huawei this part is done while we set duty pcts*/
 		pwm_free(pwm_cfg->pwm_dev);
 		qpnp_pwm_init(pwm_cfg, led->spmi_dev, led->cdev.name);
+		qpnp_led_set(&led->cdev, led->cdev.brightness);
+#endif
 		if (led->id == QPNP_ID_RGB_RED || led->id == QPNP_ID_RGB_GREEN
 				|| led->id == QPNP_ID_RGB_BLUE) {
 			rc = qpnp_rgb_set(led);
@@ -2363,6 +2447,7 @@ static void led_blink(struct qpnp_led_data *led,
 	mutex_unlock(&led->lock);
 }
 
+#ifndef CONFIG_HUAWEI_KERNEL
 static ssize_t blink_store(struct device *dev,
 	struct device_attribute *attr,
 	const char *buf, size_t count)
@@ -2396,7 +2481,159 @@ static ssize_t blink_store(struct device *dev,
 	}
 	return count;
 }
+#endif
+#ifdef CONFIG_HUAWEI_KERNEL
+/* add the log dynamic control */
+static ssize_t led_blink_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct qpnp_led_data *led = NULL;
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
 
+	LED_LOG_DBG(" %s start!\n", __func__);
+
+	led = container_of(led_cdev, struct qpnp_led_data, cdev);
+	return snprintf(buf,PAGE_SIZE,
+			"COMMAND:echo [onMS] [offMS] > /sys/class/leds/[color]/blink\n");
+}
+
+static char *led_calculate_duty(int on_ms, int off_ms, int *ramp_ms, int blink_brightness)
+{
+	int total_ms = 0;
+	int n = 0, i = 0;
+	int on_ptr = 0, off_ptr = 0;
+	char *duty_pct = NULL;
+
+	/*one on off cycle time*/
+	total_ms = on_ms + off_ms;
+	do {
+		/*keep on increasing ramp by 50 ms and get preffered ramp*/
+		*ramp_ms += 50;
+		/*get PWM cycles*/
+		n = total_ms / *ramp_ms;
+	} while (n > PWM_LUT_MAX_SIZE -1);
+
+	/*PMIC cant support so high Ramp*/
+	if(*ramp_ms > 499) {
+		on_ms = off_ms = 0;
+		LED_LOG_ERR("%s: ramp %d is too High, cant blink\n",__func__, *ramp_ms);
+		return ERR_PTR(-EINVAL);
+	}
+
+	/*et cycles of on and off, based on this we will create duty pct*/
+	on_ptr = n * (on_ms) / total_ms;
+	off_ptr = n * (off_ms) / total_ms;
+
+	/*calculate the size of duty cycle*/
+	/**3 as '64 ' and 2 as '0 '*/
+	n = sizeof(char)*( (on_ptr * 3) + (off_ptr * 2) + 1);
+	duty_pct = kzalloc(n, GFP_KERNEL);
+	if (!duty_pct) {
+		LED_LOG_ERR("%s:Unable to allocate memory\n",__func__);
+		return ERR_PTR(-ENOMEM);
+	}
+
+	if (on_ptr)
+		snprintf(duty_pct, n, "%2d", blink_brightness);
+	else
+		snprintf(duty_pct, n, "%d", 0 );
+
+	for (i = 1; i < on_ptr; i++) {
+		snprintf(duty_pct, n, "%s,%2d", duty_pct, blink_brightness);
+	}
+
+	for (i = 0; i < off_ptr; i++) {
+		strncat(duty_pct,",0", n - sizeof(duty_pct));
+	}
+
+	LED_LOG_DBG("%s: duty=%s\n",__func__, duty_pct);
+	return duty_pct;
+}
+
+static ssize_t led_blink_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	int on_ms = 0;
+	int off_ms = 0;
+	int rc = 0;
+	int ramp_ms = 0;
+	int length = 0;
+	int error = 0;
+	struct qpnp_led_data *led = NULL;
+	char *duty_pct = NULL;
+	struct pwm_config_data *pwm_cfg = NULL;
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+
+	/*if the blue led blink, the function will be back .*/
+	if (0 == strcmp("blue", led_cdev->name)) {
+		LED_LOG_DBG("%s: LED not supported\n", __func__);
+		return size;
+	}
+
+	LED_LOG_DBG(" %s start!\n", __func__);
+	led = container_of(led_cdev, struct qpnp_led_data, cdev);
+	rc = sscanf(buf,"%d %d",&on_ms,&off_ms);
+	if (2 != rc) {
+		on_ms = off_ms = 0;
+		LED_LOG_ERR("%s: para error ret = %d, turn of the blink!\n",__func__,rc);
+	}
+
+	switch (led->id) {
+	case QPNP_ID_LED_MPP:
+		pwm_cfg = led->mpp_cfg->pwm_cfg;
+		break;
+	case QPNP_ID_RGB_RED:
+	case QPNP_ID_RGB_GREEN:
+	case QPNP_ID_RGB_BLUE:
+		pwm_cfg = led->rgb_cfg->pwm_cfg;
+		break;
+	default:
+		LED_LOG_ERR("%s, Invalid LED id type \n", __func__);
+		return -EINVAL;
+	}
+
+	if (on_ms <= 0 || off_ms <= 0) {
+		led->cdev.brightness = 0;
+		pwm_cfg->lut_params.ramp_step_ms = 0;
+		pwm_free(pwm_cfg->pwm_dev);
+		qpnp_pwm_init(pwm_cfg, led->spmi_dev, led->cdev.name);
+		qpnp_led_set(&led->cdev, led->cdev.brightness);
+	}
+	else {
+		duty_pct = led_calculate_duty(on_ms,off_ms, &ramp_ms, led->max_blink_brightness);
+		if (IS_ERR_OR_NULL(duty_pct)) {
+			/*if error happen then memory will be deallocated in function itself*/
+			LED_LOG_ERR("%s:Unable to allocate memory\n",__func__);
+			error = -EINVAL;
+			goto error;
+		}
+		/*blinking will only set if the brightness is > 0*/
+		led->cdev.brightness = led->max_brightness;
+		led_blink(led,pwm_cfg);
+		pwm_cfg->lut_params.ramp_step_ms = ramp_ms;
+		length = strlen(duty_pct);
+		rc = duty_pcts_store(dev, NULL, duty_pct, length);
+		kfree(duty_pct);
+		if (rc != length) {
+			LED_LOG_ERR("%s: duty_pct store failed, rc= %d\n",__func__, rc);
+			error = -EINVAL;
+			goto error;
+		}
+	}
+
+	return size;
+error:
+		/*Turning off the blink*/
+		led->cdev.brightness = 0;
+		pwm_free(pwm_cfg->pwm_dev);
+		qpnp_pwm_init(pwm_cfg, led->spmi_dev, led->cdev.name);
+		qpnp_led_set(&led->cdev, led->cdev.brightness);
+	return error;
+
+}
+
+static DEVICE_ATTR(blink, 0664, led_blink_show, led_blink_store);
+#endif
 static DEVICE_ATTR(led_mode, 0664, NULL, led_mode_store);
 static DEVICE_ATTR(strobe, 0664, NULL, led_strobe_type_store);
 static DEVICE_ATTR(pwm_us, 0664, NULL, pwm_us_store);
@@ -2406,7 +2643,9 @@ static DEVICE_ATTR(start_idx, 0664, NULL, start_idx_store);
 static DEVICE_ATTR(ramp_step_ms, 0664, NULL, ramp_step_ms_store);
 static DEVICE_ATTR(lut_flags, 0664, NULL, lut_flags_store);
 static DEVICE_ATTR(duty_pcts, 0664, NULL, duty_pcts_store);
+#ifndef CONFIG_HUAWEI_KERNEL
 static DEVICE_ATTR(blink, 0664, NULL, blink_store);
+#endif
 
 static struct attribute *led_attrs[] = {
 	&dev_attr_led_mode.attr,

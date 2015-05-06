@@ -657,6 +657,11 @@ int mdss_mdp_cmd_kickoff(struct mdss_mdp_ctl *ctl, void *arg)
 		mdss_mdp_ctl_intf_event(ctl,
 				MDSS_EVENT_REGISTER_RECOVERY_HANDLER,
 				(void *)&ctx->recovery);
+
+		/*schedule the esd delay work*/
+#ifdef CONFIG_HUAWEI_LCD
+		mdss_dsi_status_check_ctl(ctl->mfd,true);
+#endif
 	}
 
 	MDSS_XLOG(ctl->num, ctl->roi.x, ctl->roi.y, ctl->roi.w,
@@ -705,7 +710,10 @@ int mdss_mdp_cmd_stop(struct mdss_mdp_ctl *ctl)
 		pr_err("invalid ctx\n");
 		return -ENODEV;
 	}
-
+	/*cancel the esd delay work*/
+#ifdef CONFIG_HUAWEI_LCD
+	mdss_dsi_status_check_ctl(ctl->mfd,false);
+#endif
 	list_for_each_entry_safe(handle, tmp, &ctx->vsync_handlers, list)
 		mdss_mdp_cmd_remove_vsync_handler(ctl, handle);
 	MDSS_XLOG(ctl->num, ctx->koff_cnt, ctx->clk_enabled,
@@ -734,6 +742,11 @@ int mdss_mdp_cmd_stop(struct mdss_mdp_ctl *ctl)
 					(MDSS_MDP_IRQ_PING_PONG_RD_PTR,
 							ctx->pp_num);
 				ctx->rdptr_enabled = 0;
+
+#ifdef CONFIG_HUAWEI_LCD
+				/*add the qcom patch to solve the cmd lcd esd issue*/
+				schedule_work(&ctx->clk_work);
+#endif
 			}
 		}
 

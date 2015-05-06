@@ -685,8 +685,12 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 		pr_err("%s:Panel power on failed. rc=%d\n", __func__, ret);
 		return ret;
 	}
-
+	/* add returned value ret for fucntion  -mdss_dsi_clk_ctrl */
+#ifdef CONFIG_HUAWEI_LCD
+	ret = mdss_dsi_clk_ctrl(ctrl_pdata, DSI_BUS_CLKS, 1);
+#else
 	mdss_dsi_clk_ctrl(ctrl_pdata, DSI_BUS_CLKS, 1);
+#endif
 	if (ret) {
 		pr_err("%s: failed to enable bus clocks. rc=%d\n", __func__,
 			ret);
@@ -715,11 +719,25 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 	 * Issue hardware reset line after enabling the DSI clocks and data
 	 * data lanes for LP11 init
 	 */
+/*optimize qcom code to keep just reset one time*/
+#ifndef CONFIG_HUAWEI_LCD
 	if (mipi->lp11_init)
 		mdss_dsi_panel_reset(pdata, 1);
 
 	if (mipi->init_delay)
 		usleep(mipi->init_delay);
+#else
+	if (pdata->panel_info.mipi.lp11_init) {
+		ret = mdss_dsi_panel_reset(pdata, 1);
+		if (ret) {
+			pr_err("%s: Panel reset failed. rc=%d\n",
+					__func__, ret);
+			return ret;
+		}
+	}
+	if (pdata->panel_info.mipi.init_delay)
+		usleep(pdata->panel_info.mipi.init_delay);
+#endif
 
 	if (mipi->force_clk_lane_hs) {
 		u32 tmp;
@@ -1573,7 +1591,40 @@ int dsi_panel_device_register(struct device_node *pan_node,
 	if (!gpio_is_valid(ctrl_pdata->rst_gpio))
 		pr_err("%s:%d, reset gpio not specified\n",
 						__func__, __LINE__);
-
+#ifdef CONFIG_HUAWEI_LCD
+	else{
+		rc = gpio_request(ctrl_pdata->rst_gpio, "disp_rst_n");
+		if (rc) {
+				pr_err("request reset gpio failed, rc=%d\n",
+						rc);
+		}
+	}
+	ctrl_pdata->disp_en_gpio= of_get_named_gpio(ctrl_pdev->dev.of_node,
+			 "qcom,platform-enable-gpio", 0);
+	if (!gpio_is_valid(ctrl_pdata->disp_en_gpio))
+		pr_err("%s:%d, vsp enable gpio not specified\n",
+						__func__, __LINE__);
+	else{
+		rc = gpio_request(ctrl_pdata->disp_en_gpio, "disp_vsp_enable");
+		if (rc) {
+				pr_err("request vsp gpio failed, rc=%d\n",
+						rc);
+		}
+	}
+	
+	ctrl_pdata->disp_en_gpio_vsn= of_get_named_gpio(ctrl_pdev->dev.of_node,
+			 "qcom,platform-enable-gpio-vsn", 0);
+	if (!gpio_is_valid(ctrl_pdata->disp_en_gpio_vsn))
+		pr_err("%s:%d, vsn enable gpio not specified\n",
+					__func__, __LINE__);
+	else{
+		rc = gpio_request(ctrl_pdata->disp_en_gpio_vsn, "disp_vsn_enable");
+		if (rc) {
+				pr_err("request vsn gpio failed, rc=%d\n",
+						rc);
+		}
+	}
+#endif
 	if (pinfo->mode_gpio_state != MODE_GPIO_NOT_VALID) {
 
 		ctrl_pdata->mode_gpio = of_get_named_gpio(
@@ -1584,6 +1635,10 @@ int dsi_panel_device_register(struct device_node *pan_node,
 							__func__, __LINE__);
 	} else {
 		ctrl_pdata->mode_gpio = -EINVAL;
+#ifdef CONFIG_HUAWEI_LCD
+		pr_info("%s:%d, mode gpio not specified in lcd dtsi, default setted to a negtive number[%d].\n",
+							__func__, __LINE__,ctrl_pdata->mode_gpio);
+#endif
 	}
 
 	if (mdss_dsi_clk_init(ctrl_pdev, ctrl_pdata)) {

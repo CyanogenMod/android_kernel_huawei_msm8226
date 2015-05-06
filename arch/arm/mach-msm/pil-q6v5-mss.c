@@ -26,6 +26,11 @@
 #include <linux/interrupt.h>
 #include <linux/dma-mapping.h>
 #include <linux/of_gpio.h>
+#ifdef CONFIG_HUAWEI_KERNEL
+#include <linux/uaccess.h>
+#include <linux/miscdevice.h>
+#include <linux/fs.h>
+#endif
 
 #include <mach/subsystem_restart.h>
 #include <mach/clk.h>
@@ -130,6 +135,24 @@ static int modem_shutdown(const struct subsys_desc *subsys)
 	return 0;
 }
 
+#ifdef CONFIG_HUAWEI_KERNEL
+#define OEM_QMI	"libqmi_oem_main"
+
+static void restart_oem_qmi(void)
+{
+	struct task_struct *tsk = NULL;
+
+	for_each_process(tsk)
+	{
+		if (!strcmp(tsk->comm, OEM_QMI))
+		{
+			send_sig(SIGKILL, tsk, 0);
+			return;
+		}
+	}
+}
+#endif
+
 static int modem_powerup(const struct subsys_desc *subsys)
 {
 	struct modem_data *drv = subsys_to_drv(subsys);
@@ -150,6 +173,12 @@ static int modem_powerup(const struct subsys_desc *subsys)
 	ret = pil_boot(&drv->mba->desc);
 	if (ret)
 		pil_shutdown(&drv->q6->desc);
+
+#ifdef CONFIG_HUAWEI_KERNEL
+	/* Restart oemqmi so that comm. be resume if the mode crashed*/
+	restart_oem_qmi();
+#endif
+
 	return ret;
 }
 
@@ -457,6 +486,81 @@ static void __exit pil_mss_exit(void)
 	platform_driver_unregister(&pil_mss_driver);
 }
 module_exit(pil_mss_exit);
+
+#ifdef CONFIG_HUAWEI_KERNEL
+static ssize_t pil_mss_ctl_read(struct file *fp, char __user *buf,
+			size_t count, loff_t *pos)
+{
+	return 0;
+}
+
+static ssize_t pil_mss_ctl_write(struct file *fp, const char __user *buf,
+			size_t count, loff_t *pos)
+{
+	unsigned char cmd[64];
+	int len = -1;
+
+	if (count < 1)
+		return 0;
+
+	len = count > 63 ? 63 : count;
+
+	if (copy_from_user(cmd, buf, len))
+		return -EFAULT;
+
+	cmd[len] = 0;
+
+	/* lazy */
+	if (cmd[len-1] == '\n') {
+		cmd[len-1] = 0;
+		len--;
+	}
+
+	if (!strncmp(cmd, "reset", 5)) {
+		pr_err("reset modem subsystem requested\n");
+		subsystem_restart_requested = 1;
+		subsystem_restart("modem");
+	}
+
+	return count;
+}
+
+static int pil_mss_ctl_open(struct inode *ip, struct file *fp)
+{
+	return 0;
+}
+
+static int pil_mss_ctl_release(struct inode *ip, struct file *fp)
+{
+	return 0;
+}
+
+static const struct file_operations pil_mss_ctl_fops = {
+	.owner = THIS_MODULE,
+	.read = pil_mss_ctl_read,
+	.write = pil_mss_ctl_write,
+	.open = pil_mss_ctl_open,
+	.release = pil_mss_ctl_release,
+};
+
+static struct miscdevice pil_mss_ctl_dev = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "pil_mss_ctl",
+	.fops = &pil_mss_ctl_fops,
+};
+
+static int __init pil_mss_ctl_init(void)
+{
+	return misc_register(&pil_mss_ctl_dev);
+}
+module_init(pil_mss_ctl_init);
+
+static void __exit pil_mss_ctl_exit(void)
+{
+	misc_deregister(&pil_mss_ctl_dev);
+}
+module_exit(pil_mss_ctl_exit);
+#endif
 
 MODULE_DESCRIPTION("Support for booting modem subsystems with QDSP6v5 Hexagon processors");
 MODULE_LICENSE("GPL v2");

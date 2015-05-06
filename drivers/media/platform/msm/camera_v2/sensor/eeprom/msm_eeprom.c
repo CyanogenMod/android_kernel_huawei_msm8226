@@ -1113,8 +1113,8 @@ static struct platform_driver msm_eeprom_platform_driver = {
 };
 
 static const struct i2c_device_id msm_eeprom_i2c_id[] = {
-	{ "msm_eeprom", (kernel_ulong_t)NULL},
-	{ }
+	{ "qcom,eeprom", (kernel_ulong_t)NULL},
+	{ } 
 };
 
 static struct i2c_driver msm_eeprom_i2c_driver = {
@@ -1122,7 +1122,8 @@ static struct i2c_driver msm_eeprom_i2c_driver = {
 	.probe  = msm_eeprom_i2c_probe,
 	.remove = __devexit_p(msm_eeprom_i2c_remove),
 	.driver = {
-		.name = "msm_eeprom",
+		.name = "qcom,eeprom",
+		.of_match_table = msm_eeprom_dt_match,
 	},
 };
 
@@ -1140,12 +1141,19 @@ static int __init msm_eeprom_init_module(void)
 {
 	int rc = 0;
 	CDBG("%s E\n", __func__);
+
+	if (rc) {
+		rc = spi_register_driver(&msm_eeprom_spi_driver);
+		CDBG("%s:%d spi rc %d\n", __func__, __LINE__, rc);
+		rc = i2c_add_driver(&msm_eeprom_i2c_driver);
+		CDBG("%s:%d i2c_add_driver rc %d\n", __func__, __LINE__, rc);
+	}
+
 	rc = platform_driver_probe(&msm_eeprom_platform_driver,
 		msm_eeprom_platform_probe);
-	CDBG("%s:%d platform rc %d\n", __func__, __LINE__, rc);
-	rc = spi_register_driver(&msm_eeprom_spi_driver);
-	CDBG("%s:%d spi rc %d\n", __func__, __LINE__, rc);
-	return i2c_add_driver(&msm_eeprom_i2c_driver);
+		CDBG("%s:%d platform rc %d\n", __func__, __LINE__, rc);
+
+	return rc;
 }
 
 static void __exit msm_eeprom_exit_module(void)

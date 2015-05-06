@@ -27,7 +27,17 @@
 #ifdef CONFIG_MSM_ISP_DBG
 #define CDBG(fmt, args...) pr_err(fmt, ##args)
 #else
+#ifdef CONFIG_HUAWEI_KERNEL
+#define CDBG(fmt, args...)          \
+do{                                 \
+    if(huawei_cam_is_factory_mode())\
+    {                               \
+        pr_err(fmt, ##args);        \
+    }                               \
+}while(0)
+#else
 #define CDBG(fmt, args...) do { } while (0)
+#endif
 #endif
 
 #define VFE40_8974V1_VERSION 0x10000018
@@ -81,6 +91,10 @@
 #define VFE40_BUS_BDG_QOS_CFG_6     0x000002DC
 #define VFE40_BUS_BDG_QOS_CFG_7     0x000002E0
 
+#ifdef CONFIG_HUAWEI_KERNEL_CAMERA
+#define HW_MAX_SOF_LOG_NUM 5
+static int log_print_num = 0;
+#endif
 #define VFE40_CLK_IDX 1
 static struct msm_cam_clk_info msm_vfe40_clk_info[] = {
 	{"camss_top_ahb_clk", -1},
@@ -380,7 +394,15 @@ static void msm_vfe40_process_camif_irq(struct vfe_device *vfe_dev,
 		return;
 
 	if (irq_status0 & (1 << 0)) {
+#ifdef CONFIG_HUAWEI_KERNEL_CAMERA
+		if(log_print_num > 0)
+		{
+			log_print_num--;
+			pr_info("%s: SOF IRQ %d\n", __func__,log_print_num);
+		}
+#else
 		ISP_DBG("%s: SOF IRQ\n", __func__);
+#endif
 		cnt = vfe_dev->axi_data.src_info[VFE_PIX_0].raw_stream_count;
 		if (cnt > 0) {
 			msm_isp_sof_notify(vfe_dev, VFE_RAW_0, ts);
@@ -636,6 +658,13 @@ static long msm_vfe40_reset_hardware(struct vfe_device *vfe_dev ,
 	init_completion(&vfe_dev->reset_complete);
 	if (blocking) {
 		msm_camera_io_w_mb(rst_val, vfe_dev->vfe_base + 0xC);
+
+#ifdef CONFIG_HUAWEI_KERNEL_CAMERA
+		pr_info("%s: \n",__func__);
+		//we print 5 times when camera stream on
+		log_print_num = HW_MAX_SOF_LOG_NUM;
+#endif
+
 		rc = wait_for_completion_timeout(
 			&vfe_dev->reset_complete, msecs_to_jiffies(50));
 	} else {
@@ -1111,7 +1140,7 @@ static void msm_vfe40_axi_clear_wm_xbar_reg(
 		vfe_dev->vfe_base + VFE40_XBAR_BASE(wm));
 }
 
-#define MSM_ISP40_TOTAL_WM_UB 819
+#define MSM_ISP40_TOTAL_WM_UB 1140
 
 static void msm_vfe40_cfg_axi_ub_equal_default(
 	struct vfe_device *vfe_dev)
@@ -1143,9 +1172,12 @@ static void msm_vfe40_cfg_axi_ub_equal_default(
 					(uint64_t)prop_size;
 			do_div(temp, total_image_size);
 			delta = temp;
+
 			wm_ub_size = axi_data->hw_info->min_wm_ub + delta;
 			msm_camera_io_w(ub_offset << 16 | (wm_ub_size - 1),
 				vfe_dev->vfe_base + VFE40_WM_BASE(i) + 0x10);
+			pr_err("+++ ub_offset=%d, wm_ub_size=%d\n", ub_offset,
+					wm_ub_size);
 			ub_offset += wm_ub_size;
 		} else
 			msm_camera_io_w(0,

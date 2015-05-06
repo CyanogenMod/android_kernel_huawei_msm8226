@@ -291,6 +291,24 @@ static unsigned int evdev_compute_buffer_size(struct input_dev *dev)
 	return roundup_pow_of_two(n_events);
 }
 
+static bool evdev_is_mt(struct input_dev *dev)
+{
+        unsigned long is_mt = 0;
+
+        is_mt =  (dev->absbit[BIT_WORD(ABS_MT_TOUCH_MAJOR)] & BIT_MASK(ABS_MT_TOUCH_MAJOR)) |
+                 (dev->absbit[BIT_WORD(ABS_MT_TOUCH_MINOR)] & BIT_MASK(ABS_MT_TOUCH_MINOR)) |
+                 (dev->absbit[BIT_WORD(ABS_MT_WIDTH_MAJOR)] & BIT_MASK(ABS_MT_WIDTH_MAJOR)) |
+                 (dev->absbit[BIT_WORD(ABS_MT_WIDTH_MINOR)] & BIT_MASK(ABS_MT_WIDTH_MINOR)) |
+                 (dev->absbit[BIT_WORD(ABS_MT_POSITION_X)] & BIT_MASK(ABS_MT_POSITION_X)) |
+                 (dev->absbit[BIT_WORD(ABS_MT_POSITION_Y)] & BIT_MASK(ABS_MT_POSITION_Y)) |
+                 (dev->absbit[BIT_WORD(ABS_MT_PRESSURE)] & BIT_MASK(ABS_MT_PRESSURE)) |
+                 (dev->absbit[BIT_WORD(ABS_MT_DISTANCE)] & BIT_MASK(ABS_MT_DISTANCE));
+
+        printk(KERN_ERR "absbit of evdev is %lx",is_mt);
+
+        return is_mt?true:false;
+}
+
 static int evdev_open(struct inode *inode, struct file *file)
 {
 	struct evdev *evdev;
@@ -319,8 +337,19 @@ static int evdev_open(struct inode *inode, struct file *file)
 				bufsize * sizeof(struct input_event),
 			 GFP_KERNEL);
 	if (!client) {
-		error = -ENOMEM;
-		goto err_put_evdev;
+                if(evdev_is_mt(evdev->handle.dev))
+                {
+                    printk(KERN_ERR "mt's allocation must not fail!");
+                    client = kzalloc(sizeof(struct evdev_client) +
+                                bufsize * sizeof(struct input_event),
+                                GFP_KERNEL|__GFP_NOFAIL);
+                }
+
+                if(!client)
+                {
+                    error = -ENOMEM;
+                    goto err_put_evdev;
+                }
 	}
 
 	client->clkid = CLOCK_MONOTONIC;

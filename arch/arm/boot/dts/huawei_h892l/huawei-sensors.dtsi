@@ -1,0 +1,24 @@
+ / {
+        huawei_sensor_info {
+                  compatible = "huawei,hw_sensor_info";
+                  status = "ok";
+        };
+        adsp_sensor_info {
+                  compatible = "huawei,hw_adsp_info";
+                  product_name = "H892L";
+        };
+};
+ &soc{ 
+	i2c@f9925000{	
+		ad7146@2c { 
+			compatible = "AD,ad7146"; /* Signifies that the device compatibility */
+			interrupt-parent = <&msmgpio>; /* Interrupt source */ 
+			reg = <0x2c 0>; /* Device address */ 
+			interrupts = <107 8>;  /*GPIO Interrupt pin and its Interrupt type (falling edge)*/ 
+			interrupts-name = "ad7146_2c";
+			adi,adux7146_reg=[
+				0000c020 00023230 00030419 00040832 00050000 00060000 00070000 00010fff
+			];     		
+		};
+	};
+};

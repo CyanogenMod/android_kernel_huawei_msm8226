@@ -70,4 +70,6 @@ int qpnp_pon_wd_config(bool enable)
 }
 #endif
 
+#define POWERONOFF_REASON_MAXLEN    256
+
 #endif

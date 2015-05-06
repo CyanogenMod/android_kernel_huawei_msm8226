@@ -1,0 +1,9 @@
+ / {
+        huawei_fac_info {
+                  compatible = "huawei,hw_fac_info";
+                  fac,product_name = "HUAWEI H892L";
+                  fac,hardware_ver = "HL1H892LM";
+		  fac,software_ver = "MSM8926_H892L_VA";
+                  status = "ok";
+        };
+};

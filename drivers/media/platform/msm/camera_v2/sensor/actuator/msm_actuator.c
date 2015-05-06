@@ -695,7 +695,12 @@ static int32_t msm_actuator_config(struct msm_actuator_ctrl_t *a_ctrl,
 	CDBG("%s type %d\n", __func__, cdata->cfgtype);
 	switch (cdata->cfgtype) {
 	case CFG_GET_ACTUATOR_INFO:
+#ifdef CONFIG_HUAWEI_KERNEL_CAMERA
+		/*use dtsi file config*/
+		cdata->is_af_supported = a_ctrl->vcm_enable;
+#else
 		cdata->is_af_supported = 1;
+#endif
 		cdata->cfg.cam_name = a_ctrl->cam_name;
 		break;
 

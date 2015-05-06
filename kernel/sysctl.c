@@ -63,6 +63,8 @@
 
 #include <asm/uaccess.h>
 #include <asm/processor.h>
+#include <linux/qpnp/power-on.h>
+extern char poweronoff_reason[POWERONOFF_REASON_MAXLEN];
 
 #ifdef CONFIG_X86
 #include <asm/nmi.h>
@@ -1587,6 +1589,13 @@ static struct ctl_table debug_table[] = {
 		.extra2		= &one,
 	},
 #endif
+	{
+		.procname	= "poweronoff_reason",
+		.data		= &poweronoff_reason,
+		.maxlen		= 300,
+		.mode		= 0644,
+		.proc_handler	= proc_dostring,
+        },
 	{ }
 };
 

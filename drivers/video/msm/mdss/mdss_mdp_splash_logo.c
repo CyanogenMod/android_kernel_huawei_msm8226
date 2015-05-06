@@ -26,6 +26,10 @@
 #include "splash.h"
 #include "mdss_mdp_splash_logo.h"
 
+#ifdef CONFIG_HUAWEI_LCD
+#include "mdss_dsi.h"
+#endif
+
 #define INVALID_PIPE_INDEX 0xFFFF
 #define MAX_FRAME_DONE_COUNT_WAIT 2
 
@@ -395,6 +399,10 @@ static int mdss_mdp_display_splash_image(struct msm_fb_data_type *mfd)
 	struct fb_info *fbi;
 	uint32_t image_len = SPLASH_IMAGE_WIDTH * SPLASH_IMAGE_HEIGHT
 						* SPLASH_IMAGE_BPP;
+#ifdef CONFIG_HUAWEI_LCD
+	struct mdss_panel_data *pdata = NULL;
+	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
+#endif
 	struct mdss_mdp_img_rect src_rect, dest_rect;
 	struct msm_fb_splash_info *sinfo;
 
@@ -424,6 +432,16 @@ static int mdss_mdp_display_splash_image(struct msm_fb_data_type *mfd)
 	dest_rect.h = src_rect.h = SPLASH_IMAGE_HEIGHT;
 	dest_rect.x = (fbi->var.xres >> 1) - (SPLASH_IMAGE_WIDTH >> 1);
 	dest_rect.y = (fbi->var.yres >> 1) - (SPLASH_IMAGE_HEIGHT >> 1);
+
+#ifdef CONFIG_HUAWEI_LCD
+	pdata = dev_get_platdata(&(mfd->pdev->dev));
+	ctrl = container_of(pdata,
+			struct mdss_dsi_ctrl_pdata,
+			panel_data);
+	if (!ctrl->operator_logo)
+		goto end;
+#endif
+
 
 	rc = mdss_mdp_splash_alloc_memory(mfd, image_len);
 	if (rc) {

@@ -16,6 +16,7 @@
 
 #include <linux/platform_device.h>
 #include <linux/types.h>
+#include <linux/msm_mdp.h>
 
 /* panel id type */
 struct panel_id {
@@ -307,6 +308,9 @@ struct mdss_panel_info {
 	u32 brightness_max;
 	u32 bl_max;
 	u32 bl_min;
+#ifdef CONFIG_HUAWEI_LCD
+	u32 delaytime_before_bl;
+#endif
 	u32 fb_num;
 	u32 clk_rate;
 	u32 clk_min;
@@ -344,7 +348,13 @@ struct mdss_panel_info {
 	u32 partial_update_enabled;
 	struct ion_handle *splash_ihdl;
 	u32 panel_power_on;
-
+#ifdef CONFIG_HUAWEI_LCD
+	bool orise_ic;
+	u32 bias_ic_enable;
+#endif
+#ifdef CONFIG_HUAWEI_LCD
+	u32 inversion_mode;
+#endif
 	uint32_t panel_dead;
 	bool dynamic_switch_pending;
 	bool is_lpm_mode;
@@ -378,6 +388,18 @@ struct mdss_panel_data {
 	int (*event_handler) (struct mdss_panel_data *pdata, int e, void *arg);
 
 	struct mdss_panel_data *next;
+	//remove dynamic gamma
+#ifdef CONFIG_FB_AUTO_CABC
+	int (*config_cabc) (struct mdss_panel_data *pdata,struct msmfb_cabc_config cabc_cfg);
+#endif
+#ifdef CONFIG_FB_DISPLAY_INVERSION
+	int (*lcd_set_display_inversion)(struct mdss_panel_data *pdata,unsigned int inversion_mode);
+#endif
+#ifdef CONFIG_HUAWEI_LCD
+	int (*set_inversion_mode)(struct mdss_panel_data *pdata,u32 imode);
+	int (*check_panel_status)(struct mdss_panel_data *pdata);
+	int (*check_panel_mipi_crc)(struct mdss_panel_data *pdata);
+#endif
 };
 
 /**

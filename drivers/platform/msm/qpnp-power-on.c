@@ -24,6 +24,11 @@
 #include <linux/log2.h>
 #include <linux/qpnp/power-on.h>
 
+#include <linux/time.h>
+#ifdef CONFIG_HUAWEI_KERNEL
+#include <linux/huawei_apanic.h>
+#endif
+
 #define PMIC_VER_8941           0x01
 #define PMIC_VERSION_REG        0x0105
 #define PMIC_VERSION_REV4_REG   0x0103
@@ -45,6 +50,10 @@
 #define QPNP_PON_WARM_RESET_REASON1(base)	(base + 0xA)
 #define QPNP_PON_WARM_RESET_REASON2(base)	(base + 0xB)
 #define QPNP_POFF_REASON1(base)			(base + 0xC)
+#ifdef CONFIG_HUAWEI_KERNEL
+#define QPNP_PON_POFF_REASON1(base)	(base + 0xC)
+#define QPNP_PON_POFF_REASON2(base)	(base + 0xD)
+#endif
 #define QPNP_PON_KPDPWR_S1_TIMER(base)		(base + 0x40)
 #define QPNP_PON_KPDPWR_S2_TIMER(base)		(base + 0x41)
 #define QPNP_PON_KPDPWR_S2_CNTL(base)		(base + 0x42)
@@ -110,9 +119,21 @@
 #define PON_S1_COUNT_MAX			0xF
 #define QPNP_PON_MIN_DBC_US			(USEC_PER_SEC / 64)
 #define QPNP_PON_MAX_DBC_US			(USEC_PER_SEC * 2)
+#define PON_REASON_MAX				8
+#define POFF_REASON_MAX				16
 
 #define QPNP_KEY_STATUS_DELAY			msecs_to_jiffies(250)
 
+#ifdef CONFIG_HUAWEI_KERNEL
+#define PON_SPARE_REG				0X88C
+#define PON_SPARE_WRITE_MASK		1
+#define PON_SPARE_REG_EN			1
+#endif
+#ifdef CONFIG_HUAWEI_KERNEL
+extern void hw_chg_usb_usbin_callbak(void);
+#endif
+struct timeval tv_pwr;
+struct tm tm_pwr;
 enum pon_type {
 	PON_KPDPWR,
 	PON_RESIN,
@@ -151,6 +172,10 @@ static u32 s1_delay[PON_S1_COUNT_MAX + 1] = {
 	3072, 4480, 6720, 10256
 };
 
+//store pon reason, poff reason, warm reset reason with following format:
+//<pon reason>    <poff reason>    <warm reset reason>
+char poweronoff_reason[POWERONOFF_REASON_MAXLEN] = {0};
+
 static const char * const qpnp_pon_reason[] = {
 	[0] = "Triggered from Hard Reset",
 	[1] = "Triggered from SMPL (sudden momentary power loss)",
@@ -160,6 +185,19 @@ static const char * const qpnp_pon_reason[] = {
 	[5] = "Triggered from PON1 (secondary PMIC)",
 	[6] = "Triggered from CBL (external power supply)",
 	[7] = "Triggered from KPD (power key press)",
+};
+
+//8916 platform pmic pon reason register define.
+//according "80-NK808-2X PM8916 SOFTWARE INTERFACE FOR OEMS.pdf"
+static const char * const qpnp_pon_reason_shorten[] = {
+	[0] = "BIT0_HARD_RESET",
+	[1] = "BIT1_SMPL",
+	[2] = "BIT2_RTC",
+	[3] = "BIT3_DC_CHG",
+	[4] = "BIT4_USB_CHG",
+	[5] = "BIT5_PON1",
+	[6] = "BIT6_CBLPWR_N",
+	[7] = "BIT7_KPDPWR_N",
 };
 
 static const char * const qpnp_poff_reason[] = {
@@ -182,6 +220,27 @@ static const char * const qpnp_poff_reason[] = {
 	[15] = "Triggered from STAGE3 (Stage 3 reset)",
 };
 
+//8916 platform pmic poff reason register define.
+//according "80-NK808-2X PM8916 SOFTWARE INTERFACE FOR OEMS.pdf"
+static const char * const qpnp_poff_reason_shorten[] = {
+	[0] = "BIT0_SOFT",
+	[1] = "BIT1_PS_HOLD",
+	[2] = "BIT2_PMIC_WD",
+	[3] = "BIT3_GP1",
+	[4] = "BIT4_GP2",
+	[5] = "BIT5_KPDPWR_AND_RESIN",
+	[6] = "BIT6_RESIN_N",
+	[7] = "BIT7_KPDPWR_N",
+	
+	[8] = "BIT8_UNDEF",
+	[9] = "BIT9_UNDEF",
+	[10] = "BIT10_UNDEF",
+	[11] = "BIT11_CHARGER",
+	[12] = "BIT12_TFT",
+	[13] = "BIT13_UVLO",
+	[14] = "BIT14_OTST3",
+	[15] = "BIT15_STAGE3",
+};
 static int
 qpnp_pon_masked_write(struct qpnp_pon *pon, u16 addr, u8 mask, u8 val)
 {
@@ -441,12 +500,36 @@ static irqreturn_t qpnp_kpdpwr_irq(int irq, void *_pon)
 	rc = qpnp_pon_input_dispatch(pon, PON_KPDPWR);
 	if (rc)
 		dev_err(&pon->spmi->dev, "Unable to send input event\n");
-
+#ifdef CONFIG_HUAWEI_KERNEL
+	do_gettimeofday(&tv_pwr);
+	time_to_tm(tv_pwr.tv_sec, 0, &tm_pwr);
+	pr_info("Exit %s : [%ld-%d-%d]%d:%d:%d:%ld\n",__func__,tm_pwr.tm_year + 1900,tm_pwr.tm_mon+1,
+						tm_pwr.tm_mday,tm_pwr.tm_hour,tm_pwr.tm_min,tm_pwr.tm_sec,tv_pwr.tv_usec%1000);
+#endif
 	return IRQ_HANDLED;
 }
 
+#ifdef CONFIG_MSM_DLOAD_MODE
+#ifdef CONFIG_HUAWEI_KERNEL
+extern void clear_dload_mode(void);
+#endif
+#endif
+
 static irqreturn_t qpnp_kpdpwr_bark_irq(int irq, void *_pon)
 {
+#ifdef CONFIG_MSM_DLOAD_MODE
+#ifdef CONFIG_HUAWEI_KERNEL
+	/* clear dload mode to reduce false triggering dump*/
+	clear_dload_mode();
+#endif
+#endif
+
+#ifdef CONFIG_HUAWEI_KERNEL
+    /*clear the hardware reset magic number reset */
+    clear_hw_reset();
+	/*print message to inform developer this is triggered by long press power key */
+	printk(KERN_ERR "long press power key have detected!\n");
+#endif
 	return IRQ_HANDLED;
 }
 
@@ -468,13 +551,17 @@ static irqreturn_t qpnp_kpdpwr_resin_bark_irq(int irq, void *_pon)
 
 static irqreturn_t qpnp_cblpwr_irq(int irq, void *_pon)
 {
+#ifndef CONFIG_HUAWEI_KERNEL
 	int rc;
 	struct qpnp_pon *pon = _pon;
 
 	rc = qpnp_pon_input_dispatch(pon, PON_CBLPWR);
 	if (rc)
 		dev_err(&pon->spmi->dev, "Unable to send input event\n");
-
+#endif
+#ifdef CONFIG_HUAWEI_KERNEL
+	hw_chg_usb_usbin_callbak();
+#endif
 	return IRQ_HANDLED;
 }
 
@@ -732,6 +819,12 @@ qpnp_pon_request_irqs(struct qpnp_pon *pon, struct qpnp_pon_config *cfg)
 							cfg->state_irq);
 			return rc;
 		}
+#ifdef CONFIG_HUAWEI_KERNEL
+		else
+		{
+			enable_irq_wake(cfg->state_irq);
+		}
+#endif
 		break;
 	case PON_KPDPWR_RESIN:
 		if (cfg->use_bark) {
@@ -1101,6 +1194,123 @@ free_input_dev:
 		input_free_device(pon->pon_input);
 	return rc;
 }
+#ifdef CONFIG_HUAWEI_KERNEL
+#define REASON_MAX		16
+
+static const char * const qpnp_pwr_off_reason[] = {
+	[0] = "Triggered by Software",
+	[1] = "Triggered by PS_HOLD",
+	[2] = "Triggered by PMIC Watchdog",
+	[3] = "Triggered by Keypad_Reset1",
+	[4] = "Triggered by Keypad_Reset2",
+	[5] = "Triggered by simultaneous KPDPWR_N + RESIN_N",
+	[6] = "Triggered by RESIN_N",
+	[7] = "Unknow",
+	[8] = "Unknow",
+	[9] = "Unknow",
+	[10] = "Unknow",
+	[11] = "Triggered by Charger (ENUM_TIMER, BOOT_DONE)",
+	[12] = "Triggered by AFP",
+	[13] = "Triggered by UVLO",
+	[14] = "Triggered by Overtemp",
+	[15] = "Triggered by stage3 reset",
+};
+
+static const char * const qpnp_pon_warm_reset_reason[] = {
+	[0] = "Triggered by Software",
+	[1] = "Triggered by PS_HOLD",
+	[2] = "Triggered by PMIC Watchdog",
+	[3] = "Triggered by Keypad_Reset1",
+	[4] = "Triggered by Keypad_Reset2",
+	[5] = "Triggered by simultaneous KPDPWR_N + RESIN_N",
+	[6] = "Triggered by RESIN_N",
+	[7] = "Triggered by KPDPWR_N",
+	[8] = "Unknow",
+	[9] = "Unknow",
+	[10] = "Unknow",
+	[11] = "Unknow",
+	[12] = "Triggered AFP",
+	[13] = "Unknow",
+	[14] = "Unknow",
+	[15] = "Unknow",
+};
+
+//8916 platform pmic poff reason register define.
+//according "80-NK808-2X PM8916 SOFTWARE INTERFACE FOR OEMS.pdf"
+static const char * const qpnp_pon_warm_reset_reason_shorten[] = {
+	[0] = "BIT0_SOFT",
+	[1] = "BIT1_PS_HOLD",
+	[2] = "BIT2_PMIC_WD",
+	[3] = "BIT3_GP1",
+	[4] = "BIT4_GP2",
+	[5] = "BIT5_KPDPWR_AND_RESIN",
+	[6] = "BIT6_RESIN_N",
+	[7] = "BIT7_KPDPWR_N",
+	
+	[8] = "BIT8_UNDEF",
+	[9] = "BIT9_UNDEF",
+	[10] = "BIT10_UNDEF",
+	[11] = "BIT11_UNDEF",
+	[12] = "BIT12_AFP",
+	[13] = "BIT13_UNDEF",
+	[14] = "BIT14_UNDEF",
+	[15] = "BIT15_UNDEF",
+};
+
+static void hw_pmic_power_info(void)
+{
+	u16 pwr_off_reason = 0; //0x80C,0x80D
+	u16 pon_warm_reset_reason = 0;  //0x80A,0x80B
+	//u16 pon_soft_reset_reason = 0;  //0x80E,0x80F	
+	struct qpnp_pon *pon = sys_reset_dev;
+	int rc;
+	int index;
+
+	if (!pon)
+		return ;
+
+	rc = spmi_ext_register_readl(pon->spmi->ctrl, pon->spmi->sid,
+				QPNP_PON_POFF_REASON1(pon->base), (u8 *)&pwr_off_reason, 2);
+	if (rc) {
+		pr_err("Unable to read POFF_RESASON reg\n");
+		return ;
+	}
+
+	index = ffs(pwr_off_reason);
+	if ((index > REASON_MAX) || (index < 0))
+		index = 0;
+
+	pr_info("Power-off reason: %s and reg : 0x%x\n",
+		 index ? qpnp_pwr_off_reason[index - 1] :
+		"Unknown", pwr_off_reason);
+
+    //fill poff reason into global var 'poweronoff_reason'
+    snprintf((char *)(poweronoff_reason+strlen(poweronoff_reason)),  
+       sizeof(poweronoff_reason)-strlen(poweronoff_reason), 
+       "<poff 0x%x  %s>    ", pwr_off_reason, index ? qpnp_poff_reason_shorten[index-1] : "unknown");
+	
+	rc = spmi_ext_register_readl(pon->spmi->ctrl, pon->spmi->sid,
+				QPNP_PON_WARM_RESET_REASON1(pon->base), (u8 *)&pon_warm_reset_reason, 2);
+	if (rc) {
+		pr_err("Unable to read WARM_RESET_RESASON reg\n");
+		return ;
+	}
+
+	index = ffs(pon_warm_reset_reason);
+	if ((index > REASON_MAX) || (index < 0))
+		index = 0;
+
+	pr_info("Pon_warm_reset reason: %s and reg : 0x%x \n",
+		 index ? qpnp_pon_warm_reset_reason[index - 1] :
+		"Unknown", pon_warm_reset_reason);
+    //fill warm reset reason into global var 'poweronoff_reason'
+    snprintf((char *)(poweronoff_reason+strlen(poweronoff_reason)),  
+        sizeof(poweronoff_reason)-strlen(poweronoff_reason), 
+        "<warmreset 0x%x  %s >    ", pon_warm_reset_reason, index ? qpnp_pon_warm_reset_reason_shorten[index-1] : "cold boot");
+
+	return;
+}
+#endif
 
 static int __devinit qpnp_pon_probe(struct spmi_device *spmi)
 {
@@ -1174,6 +1384,16 @@ static int __devinit qpnp_pon_probe(struct spmi_device *spmi)
 			pon->spmi->sid, qpnp_pon_reason[index],
 			cold_boot ? "cold" : "warm");
 
+#ifdef CONFIG_HUAWEI_KERNEL
+	index = ffs(pon_sts);
+	if ((index > PON_REASON_MAX) || (index < 0))
+		index = 0;
+	//fill pon reason into global var 'poweronoff_reason'
+    snprintf((char *)(poweronoff_reason+strlen(poweronoff_reason)),  
+                   sizeof(poweronoff_reason)-strlen(poweronoff_reason), 
+                   "<pon 0x%x  %s>    ", pon_sts, index ? qpnp_pon_reason_shorten[index-1]:"unknown");
+#endif
+
 	/* POFF reason */
 	rc = spmi_ext_register_readl(pon->spmi->ctrl, pon->spmi->sid,
 				QPNP_POFF_REASON1(pon->base),
@@ -1193,6 +1413,10 @@ static int __devinit qpnp_pon_probe(struct spmi_device *spmi)
 				"PMIC@SID%d: Power-off reason: %s\n",
 				pon->spmi->sid,
 				qpnp_poff_reason[index]);
+
+#ifdef CONFIG_HUAWEI_KERNEL
+	hw_pmic_power_info();
+#endif
 
 	rc = of_property_read_u32(pon->spmi->dev.of_node,
 				"qcom,pon-dbc-delay", &delay);
@@ -1278,6 +1502,16 @@ static int __devinit qpnp_pon_probe(struct spmi_device *spmi)
 			"Unable to intialize PON configurations\n");
 		return rc;
 	}
+
+#ifdef CONFIG_HUAWEI_KERNEL
+	/*enable the pmic spare register*/
+	rc = qpnp_pon_masked_write(pon,PON_SPARE_REG,PON_SPARE_WRITE_MASK,PON_SPARE_REG_EN);
+	if (rc) {
+		dev_err(&spmi->dev,
+			"Unable to write PON spare reg\n");
+		return rc;
+	}
+#endif
 
 	return rc;
 }

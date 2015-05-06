@@ -783,8 +783,13 @@ int msm_camera_init_gpio_pin_tbl(struct device_node *of_node,
 		gconf->gpio_num_info->gpio_num[SENSOR_GPIO_STANDBY] =
 			gpio_array[val];
 		gconf->gpio_num_info->valid[SENSOR_GPIO_STANDBY] = 1;
+#ifdef CONFIG_HUAWEI_KERNEL_CAMERA
+		CDBG("%s qcom,gpio-standby %d\n", __func__,
+			gconf->gpio_num_info->gpio_num[SENSOR_GPIO_STANDBY]);
+#else
 		CDBG("%s qcom,gpio-reset %d\n", __func__,
 			gconf->gpio_num_info->gpio_num[SENSOR_GPIO_STANDBY]);
+#endif
 	}
 
 	if (of_property_read_bool(of_node, "qcom,gpio-flash-en") == true) {

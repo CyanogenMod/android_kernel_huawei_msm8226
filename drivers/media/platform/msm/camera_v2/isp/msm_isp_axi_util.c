@@ -1122,7 +1122,8 @@ void msm_camera_io_dump_2(void __iomem *addr, int size)
 	int i;
 	u32 *p = (u32 *) addr;
 	u32 data;
-	ISP_DBG("%s: %p %d\n", __func__, addr, size);
+	pr_err("%s: %p %d\n", __func__, addr, size);
+	//ISP_DBG("%s: %p %d\n", __func__, addr, size);
 	line_str[0] = '\0';
 	p_str = line_str;
 	for (i = 0; i < size/4; i++) {
@@ -1134,13 +1135,15 @@ void msm_camera_io_dump_2(void __iomem *addr, int size)
 		snprintf(p_str, 12, "%08x ", data);
 		p_str += 9;
 		if ((i + 1) % 4 == 0) {
-			ISP_DBG("%s\n", line_str);
+			pr_err("%s\n", line_str);
+			//ISP_DBG("%s\n", line_str);
 			line_str[0] = '\0';
 			p_str = line_str;
 		}
 	}
 	if (line_str[0] != '\0')
-		ISP_DBG("%s\n", line_str);
+		pr_err("%s\n", line_str);
+		//ISP_DBG("%s\n", line_str);
 }
 
 /*Factor in Q2 format*/

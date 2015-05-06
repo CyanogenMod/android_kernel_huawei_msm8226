@@ -32,6 +32,7 @@
 #define CSI_DECODE_DPCM_10_8_10 5
 
 #define MAX_SENSOR_NAME 32
+#define MAX_PRODUCT_NAME 32
 
 #define MAX_ACT_MOD_NAME_SIZE 32
 #define MAX_ACT_NAME_SIZE 32
@@ -261,6 +262,7 @@ struct msm_camera_i2c_reg_array {
 	uint16_t reg_addr;
 	uint16_t reg_data;
 	uint32_t delay;
+	enum msm_camera_i2c_data_type data_type;
 };
 
 struct msm_camera_i2c_reg_setting {
@@ -346,6 +348,18 @@ enum camb_position_t {
 	INVALID_CAMERA_B,
 };
 
+struct msm_sensor_dig_gain {
+    uint16_t gr_gain;
+    uint16_t r_gain;
+    uint16_t b_gain;
+    uint16_t gb_gain;
+};
+typedef struct {
+    uint16_t macro_dac;
+    uint16_t infinity_dac;
+    uint16_t starting_dac;
+} sensor_afcalib_data_t;
+
 struct msm_sensor_info_t {
 	char     sensor_name[MAX_SENSOR_NAME];
 	int32_t  session_id;
@@ -354,6 +368,12 @@ struct msm_sensor_info_t {
 	uint32_t sensor_mount_angle;
 	int modes_supported;
 	enum camb_position_t position;
+	/*add project name for the project menu*/
+	char sensor_project_name[MAX_SENSOR_NAME];
+	struct msm_sensor_dig_gain sensor_otp_dig_gain;
+	int8_t sensor_otp_af_calibration;
+	sensor_afcalib_data_t sensor_otp_afcalib;
+	char product_name[MAX_PRODUCT_NAME];
 };
 
 struct camera_vreg_t {
@@ -484,6 +504,10 @@ enum msm_sensor_cfg_type_t {
 	CFG_SET_WHITE_BALANCE,
 	CFG_SET_AUTOFOCUS,
 	CFG_CANCEL_AUTOFOCUS,
+	CFG_GET_SENSOR_PROJECT_INFO,
+	/*CFG_WRITE_OTP_DATA will be used in vendor,so not add huawei kernel macro*/
+	CFG_WRITE_OTP_DATA,
+	CFG_WRITE_EXPOSURE_DATA
 };
 
 enum msm_actuator_cfg_type_t {
@@ -595,6 +619,9 @@ enum af_camera_name {
 	ACTUATOR_MAIN_CAM_3,
 	ACTUATOR_MAIN_CAM_4,
 	ACTUATOR_MAIN_CAM_5,
+	ACTUATOR_MAIN_CAM_6,
+	ACTUATOR_MAIN_CAM_7,
+	ACTUATOR_MAIN_CAM_8,
 	ACTUATOR_WEB_CAM_0,
 	ACTUATOR_WEB_CAM_1,
 	ACTUATOR_WEB_CAM_2,
@@ -638,6 +665,12 @@ enum msm_camera_led_config_t {
 	MSM_CAMERA_LED_HIGH,
 	MSM_CAMERA_LED_INIT,
 	MSM_CAMERA_LED_RELEASE,
+	MSM_CAMERA_LED_TORCH_LOW,
+	MSM_CAMERA_LED_TORCH_MEDIUM,
+	MSM_CAMERA_LED_TORCH_LOW_HIGH,
+	MSM_CAMERA_LED_TORCH_POWER_NORMAL = 108,	//108
+	MSM_CAMERA_LED_TORCH_POWER_LOW,				//109
+       /* fix mistake */
 };
 
 struct msm_camera_led_cfg_t {

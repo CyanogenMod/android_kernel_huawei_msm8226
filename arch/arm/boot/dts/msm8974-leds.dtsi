@@ -156,13 +156,12 @@
 			qcom,max-current = <20>;
 			qcom,row-id = <1>;
 			qcom,row-src-en;
-                        qcom,start-idx = <1>;
-                        qcom,ramp-step-ms = <120>;
-                        qcom,duty-pcts = [00 00 00 00 64
+                         qcom,start-idx = <1>;
+                         qcom,ramp-step-ms = <120>;
+			qcom,duty-pcts = [00 00 00 00 64
                                         64 00 00 00 00];
-                        qcom,use-blink;
-                        qcom,in-order-command-processing;
-
+			qcom,use-blink;
+			qcom,in-order-command-processing;
 		};
 
 		qcom,kpdbl3 {
@@ -175,13 +174,12 @@
 			qcom,max-current = <20>;
 			qcom,row-id = <2>;
 			qcom,row-src-en;
-                        qcom,start-idx = <1>;
-                        qcom,ramp-step-ms = <120>;
-                        qcom,duty-pcts = [00 00 00 00 64
-                                        64 00 00 00 00];
-                        qcom,use-blink;
-                        qcom,in-order-command-processing;
-
+			qcom,start-idx = <1>;
+			qcom,ramp-step-ms = <120>;
+			qcom,duty-pcts = [00 00 00 00 64
+					64 00 00 00 00];
+			qcom,use-blink;
+			qcom,in-order-command-processing;
 		};
 
 		qcom,kpdbl4 {
@@ -194,13 +192,12 @@
 			qcom,max-current = <20>;
 			qcom,row-id = <3>;
 			qcom,row-src-en;
-                        qcom,start-idx = <1>;
-                        qcom,ramp-step-ms = <120>;
-                        qcom,duty-pcts = [00 00 00 00 64
-                                        64 00 00 00 00];
-                        qcom,use-blink;
-                        qcom,in-order-command-processing;
-
+			qcom,start-idx = <1>;
+			qcom,ramp-step-ms = <120>;
+			qcom,duty-pcts = [00 00 00 00 64
+					64 00 00 00 00];
+			qcom,use-blink;
+			qcom,in-order-command-processing;
 		};
 	};
 };

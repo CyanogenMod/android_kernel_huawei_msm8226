@@ -149,10 +149,25 @@ static int console_may_schedule;
 #ifdef CONFIG_PRINTK
 
 static char __log_buf[__LOG_BUF_LEN];
+#ifdef CONFIG_EXT4_HUAWEI_DEBUG
+const char *kmsg_buf = __log_buf;
+#endif
 static char *log_buf = __log_buf;
 static int log_buf_len = __LOG_BUF_LEN;
 static unsigned logged_chars; /* Number of chars produced since last read+clear operation */
 static int saved_console_loglevel = -1;
+
+#ifdef CONFIG_HUAWEI_KERNEL
+void* huawei_get_log_buf_addr(void)
+{
+	return log_buf;
+}
+
+int huawei_get_log_buf_len(void)
+{
+	return log_buf_len;
+}
+#endif
 
 #ifdef CONFIG_KEXEC
 /*
@@ -991,7 +1006,11 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 
 				t = cpu_clock(printk_cpu);
 				nanosec_rem = do_div(t, 1000000000);
+#ifndef CONFIG_HUAWEI_KERNEL
 				tlen = sprintf(tbuf, "[%5lu.%06lu] ",
+#else
+				tlen = sprintf(tbuf, "[%d, %s] [%5lu.%06lu] ", current->pid, current->comm,
+#endif
 						(unsigned long) t,
 						nanosec_rem / 1000);
 

@@ -19,6 +19,12 @@
 #include <mach/rpm-regulator.h>
 #include <mach/rpm-regulator-smd.h>
 #include <linux/regulator/consumer.h>
+#ifdef CONFIG_HUAWEI_KERNEL
+#include <misc/app_info.h>
+#endif
+#ifdef CONFIG_HUAWEI_HW_DEV_DCT
+#include <linux/hw_dev_dec.h>
+#endif
 
 #define I2C_USER_REG_DATA_MAX 1024
 /*#define CONFIG_MSMB_CAMERA_DEBUG*/
@@ -129,6 +135,11 @@ static int32_t msm_sensor_get_dt_data(struct device_node *of_node,
 	if (rc < 0) {
 		pr_err("%s failed %d\n", __func__, __LINE__);
 		goto FREE_SENSORDATA;
+	}
+	ret = of_property_read_string(of_node, "qcom,product-name",
+		&sensordata->product_name);
+	if(ret<0) {
+		printk("CAM_DBG :no product_name\n");
 	}
 
 	rc = of_property_read_u32(of_node, "qcom,cci-master",
@@ -261,13 +272,18 @@ static int32_t msm_sensor_get_dt_data(struct device_node *of_node,
 			goto FREE_GPIO_SET_TBL;
 		}
 	}
+	/*
+	  delete msm_sensor_get_dt_actuator_data() in here,
+	  because the of_node is incorrect.
+	*/
+#ifndef CONFIG_HUAWEI_KERNEL_CAMERA
 	rc = msm_sensor_get_dt_actuator_data(of_node,
 					     &sensordata->actuator_info);
 	if (rc < 0) {
 		pr_err("%s failed %d\n", __func__, __LINE__);
 		goto FREE_GPIO_PIN_TBL;
 	}
-
+#endif
 	sensordata->slave_info = kzalloc(sizeof(struct msm_camera_slave_info),
 		GFP_KERNEL);
 	if (!sensordata->slave_info) {
@@ -305,8 +321,10 @@ FREE_SLAVE_INFO:
 	kfree(s_ctrl->sensordata->slave_info);
 FREE_ACTUATOR_INFO:
 	kfree(s_ctrl->sensordata->actuator_info);
+#ifndef CONFIG_HUAWEI_KERNEL_CAMERA
 FREE_GPIO_PIN_TBL:
 	kfree(s_ctrl->sensordata->power_info.gpio_conf->gpio_num_info);
+#endif
 FREE_GPIO_SET_TBL:
 	kfree(s_ctrl->sensordata->power_info.gpio_conf->cam_gpio_set_tbl);
 FREE_GPIO_REQ_TBL:
@@ -567,6 +585,12 @@ int msm_sensor_config(struct msm_sensor_ctrl_t *s_ctrl, void __user *argp)
 		memcpy(cdata->cfg.sensor_info.sensor_name,
 			s_ctrl->sensordata->sensor_name,
 			sizeof(cdata->cfg.sensor_info.sensor_name));
+		if( s_ctrl->sensordata->product_name)
+			memcpy(cdata->cfg.sensor_info.product_name,
+					s_ctrl->sensordata->product_name,
+					sizeof(cdata->cfg.sensor_info.product_name));
+		else 
+			cdata->cfg.sensor_info.product_name[0]='\0';
 		cdata->cfg.sensor_info.session_id =
 			s_ctrl->sensordata->sensor_info->session_id;
 		for (i = 0; i < SUB_MODULE_MAX; i++)
@@ -742,7 +766,9 @@ int msm_sensor_config(struct msm_sensor_ctrl_t *s_ctrl, void __user *argp)
 		if ((!conf_array.size) ||
 			(conf_array.size > I2C_USER_REG_DATA_MAX )) {
 			pr_err("%s:%d failed\n", __func__, __LINE__);
+#ifndef CONFIG_HUAWEI_KERNEL_CAMERA
 			rc = -EFAULT;
+#endif
 			break;
 		}
 
@@ -768,6 +794,70 @@ int msm_sensor_config(struct msm_sensor_ctrl_t *s_ctrl, void __user *argp)
 		kfree(reg_setting);
 		break;
 	}
+#ifdef CONFIG_HUAWEI_KERNEL_CAMERA
+	case CFG_WRITE_EXPOSURE_DATA: {
+		struct msm_camera_i2c_reg_setting conf_array;
+		struct msm_camera_i2c_reg_array *reg_setting = NULL;
+
+		if (s_ctrl->sensor_state != MSM_SENSOR_POWER_UP) {
+			pr_err("%s:%d failed: invalid state %d\n", __func__,
+				__LINE__, s_ctrl->sensor_state);
+			rc = -EFAULT;
+			break;
+		}
+
+		if (copy_from_user(&conf_array,
+			(void *)cdata->cfg.setting,
+			sizeof(struct msm_camera_i2c_reg_setting))) {
+			pr_err("%s:%d failed\n", __func__, __LINE__);
+			rc = -EFAULT;
+			break;
+		}
+
+		if (!conf_array.size) {
+			pr_err("%s:%d failed\n", __func__, __LINE__);
+			break;
+		}
+
+		reg_setting = kzalloc(conf_array.size *
+			(sizeof(struct msm_camera_i2c_reg_array)), GFP_KERNEL);
+		if (!reg_setting) {
+			pr_err("%s:%d failed\n", __func__, __LINE__);
+			rc = -ENOMEM;
+			break;
+		}
+		if (copy_from_user(reg_setting, (void *)conf_array.reg_setting,
+			conf_array.size *
+			sizeof(struct msm_camera_i2c_reg_array))) {
+			pr_err("%s:%d failed\n", __func__, __LINE__);
+			kfree(reg_setting);
+			rc = -EFAULT;
+			break;
+		}
+
+		conf_array.reg_setting = reg_setting;
+		for (i = 0; i < conf_array.size; i++) {
+			if(conf_array.reg_setting[i].data_type){
+				rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
+					s_ctrl->sensor_i2c_client, conf_array.reg_setting[i].reg_addr, conf_array.reg_setting[i].reg_data, 
+					conf_array.reg_setting[i].data_type);
+			}
+			else{
+				rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
+					s_ctrl->sensor_i2c_client, conf_array.reg_setting[i].reg_addr, conf_array.reg_setting[i].reg_data, 
+					conf_array.data_type);
+			}
+		}
+		if (conf_array.delay > 20)
+			msleep(conf_array.delay);
+		else if (conf_array.delay)
+			usleep_range(conf_array.delay * 1000, (conf_array.delay
+				* 1000) + 1000);
+		
+		kfree(reg_setting);
+		break;
+	}
+#endif
 	case CFG_SLAVE_READ_I2C: {
 		struct msm_camera_i2c_read_config read_config;
 		uint16_t local_data = 0;
@@ -1036,6 +1126,32 @@ int msm_sensor_config(struct msm_sensor_ctrl_t *s_ctrl, void __user *argp)
 		}
 		break;
 	}
+#ifdef CONFIG_HUAWEI_KERNEL_CAMERA
+    case CFG_GET_SENSOR_PROJECT_INFO:
+        memcpy(cdata->cfg.sensor_info.sensor_project_name,
+               s_ctrl->sensordata->sensor_info->sensor_project_name,
+               sizeof(cdata->cfg.sensor_info.sensor_project_name));
+
+        CDBG("%s, %d: sensor project name %s\n", __func__, __LINE__,
+             cdata->cfg.sensor_info.sensor_project_name);
+
+    break;
+	case CFG_WRITE_OTP_DATA:
+		if (s_ctrl->func_tbl->sensor_write_otp)
+		{
+			rc = s_ctrl->func_tbl->sensor_write_otp(s_ctrl);
+			if(!rc)
+			{
+				cdata->cfg.sensor_info.sensor_otp_dig_gain =
+				  s_ctrl->sensordata->sensor_info->sensor_otp_dig_gain;
+                cdata->cfg.sensor_info.sensor_otp_afcalib =
+                  s_ctrl->sensordata->sensor_info->sensor_otp_afcalib;
+                cdata->cfg.sensor_info.sensor_otp_af_calibration =
+                  s_ctrl->sensordata->sensor_info->sensor_otp_af_calibration;
+			}
+		}
+	break;
+#endif
 	default:
 		rc = -EFAULT;
 		break;
@@ -1056,6 +1172,15 @@ int msm_sensor_check_id(struct msm_sensor_ctrl_t *s_ctrl)
 		rc = msm_sensor_match_id(s_ctrl);
 	if (rc < 0)
 		pr_err("%s:%d match id failed rc %d\n", __func__, __LINE__, rc);
+
+#ifdef CONFIG_HUAWEI_KERNEL_CAMERA
+	if (s_ctrl->func_tbl->sensor_match_module)
+		rc = s_ctrl->func_tbl->sensor_match_module(s_ctrl);
+	if (rc < 0) {
+		pr_err("%s:%d match module failed rc %d\n", __func__, __LINE__, rc);
+	}
+#endif
+
 	return rc;
 }
 
@@ -1190,6 +1315,15 @@ int32_t msm_sensor_platform_probe(struct platform_device *pdev, void *data)
 		return rc;
 	}
 
+	if (s_ctrl->func_tbl->sensor_write_otp)
+	{
+		rc = s_ctrl->func_tbl->sensor_write_otp(s_ctrl);
+		if(rc < 0)
+		{
+			pr_err("%s: %d write otp failed\n", __func__, __LINE__);
+		}
+	}
+
 	CDBG("%s %s probe succeeded\n", __func__,
 		s_ctrl->sensordata->sensor_name);
 	v4l2_subdev_init(&s_ctrl->msm_sd.sd,
@@ -1216,6 +1350,48 @@ int32_t msm_sensor_platform_probe(struct platform_device *pdev, void *data)
 	s_ctrl->msm_sd.close_seq = MSM_SD_CLOSE_2ND_CATEGORY | 0x3;
 	msm_sd_register(&s_ctrl->msm_sd);
 	CDBG("%s:%d\n", __func__, __LINE__);
+
+#ifdef CONFIG_HUAWEI_KERNEL
+	if(s_ctrl && s_ctrl->sensordata && s_ctrl->sensordata->sensor_info
+		&& s_ctrl->sensordata->sensor_name)
+	{
+		switch(s_ctrl->sensordata->sensor_info->position)
+		{
+			case BACK_CAMERA_B:
+				app_info_set("camera_main", s_ctrl->sensordata->sensor_name);
+				break;
+			case FRONT_CAMERA_B:
+				app_info_set("camera_slave", s_ctrl->sensordata->sensor_name);
+				break;
+			default:
+				pr_err("%s: unkown sensor position %d\n",
+					__func__, s_ctrl->sensordata->sensor_info->position);
+				break;
+		}
+	}
+	else
+	{
+		pr_err("%s: empty pointer in sensordata\n", __func__);
+	}
+#endif
+
+#ifdef CONFIG_HUAWEI_HW_DEV_DCT
+	/* detect current device successful, set the flag as present */
+	switch(s_ctrl->sensordata->sensor_info->position)
+	{
+		case BACK_CAMERA_B:
+			set_hw_dev_flag(DEV_I2C_CAMERA_MAIN);
+			printk("%s: %s set_hw_dev_flag success!! \n",__func__,s_ctrl->sensordata->sensor_name);
+			break;
+		case FRONT_CAMERA_B:
+			set_hw_dev_flag(DEV_I2C_CAMERA_SLAVE);
+			printk("%s: %s set_hw_dev_flag success!! \n",__func__,s_ctrl->sensordata->sensor_name);
+			break;
+		default:
+			printk("%s: %s set_hw_dev_flag fail!! \n",__func__,s_ctrl->sensordata->sensor_name);
+			break;
+	}
+#endif
 
 	s_ctrl->func_tbl->sensor_power_down(s_ctrl);
 	CDBG("%s:%d\n", __func__, __LINE__);

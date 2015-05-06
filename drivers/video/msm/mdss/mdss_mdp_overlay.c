@@ -1492,7 +1492,11 @@ static int __mdss_mdp_overlay_release_all(struct msm_fb_data_type *mfd,
 	}
 	mutex_unlock(&mdp5_data->ov_lock);
 
+#ifdef CONFIG_HUAWEI_LCD
+	if (cnt && mfd->panel_power_on)
+#else
 	if (cnt)
+#endif
 		mfd->mdp.kickoff_fnc(mfd, NULL);
 
 	list_for_each_entry_safe(rot, tmp, &mdp5_data->rot_proc_list, list) {
@@ -2988,6 +2992,10 @@ static int mdss_mdp_overlay_off(struct msm_fb_data_type *mfd)
 		__vsync_retire_signal(mfd, mdp5_data->retire_cnt);
 	}
 
+#ifdef CONFIG_HUAWEI_LCD
+	if (atomic_dec_return(&ov_active_panels) == 0)
+		mdss_mdp_rotator_release_all();
+#endif
 	rc = mdss_mdp_ctl_stop(mdp5_data->ctl);
 	if (rc == 0) {
 		__mdss_mdp_overlay_free_list_purge(mfd);
@@ -2999,10 +3007,10 @@ static int mdss_mdp_overlay_off(struct msm_fb_data_type *mfd)
 			mdss_mdp_ctl_destroy(mdp5_data->ctl);
 			mdp5_data->ctl = NULL;
 		}
-
+#ifndef CONFIG_HUAWEI_LCD
 		if (atomic_dec_return(&ov_active_panels) == 0)
 			mdss_mdp_rotator_release_all();
-
+#endif
 		rc = pm_runtime_put(&mfd->pdev->dev);
 		if (rc)
 			pr_err("unable to suspend w/pm_runtime_put (%d)\n", rc);
