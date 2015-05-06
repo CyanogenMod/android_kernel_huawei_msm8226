@@ -1186,6 +1186,12 @@
 					0x0fa00000 0x500000>; /* Address and Size of Hole */
 	};
 
+	/* CONFIG_SEC_DEBUG : CONFIG_ANDROID_RAM_CONSOLE */
+	ram_console {
+		compatible = "ram_console";
+		bootinfo = <0>;
+	};
+
 	huawei,huawei-mem-hole {
 		compatible = "huawei,huawei-mem-hole";
 		huawei,memblock-remove-huawei = <0x12C00000 0x100000>;

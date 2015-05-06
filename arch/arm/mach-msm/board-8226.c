@@ -51,6 +51,9 @@
 #include <mach/rpm-regulator-smd.h>
 #include <mach/msm_smem.h>
 #include <linux/msm_thermal.h>
+#ifdef CONFIG_ANDROID_PERSISTENT_RAM
+#include <linux/persistent_ram.h>
+#endif
 #include "board-dt.h"
 #include "clock.h"
 #include "platsmp.h"
@@ -58,6 +61,25 @@
 #include "pm.h"
 #include "modem_notifier.h"
 #include "spm-regulator.h"
+
+
+#ifdef CONFIG_ANDROID_PERSISTENT_RAM
+/* CONFIG_SEC_DEBUG reserving memory for persistent RAM*/
+#define RAMCONSOLE_PHYS_ADDR 0x1FB00000
+static struct persistent_ram_descriptor per_ram_descs[] __initdata = {
+       {
+               .name = "ram_console",
+               .size = SZ_1M,
+       }
+};
+
+static struct persistent_ram per_ram __initdata = {
+       .descs = per_ram_descs,
+       .num_descs = ARRAY_SIZE(per_ram_descs),
+       .start = RAMCONSOLE_PHYS_ADDR,
+       .size = SZ_1M
+};
+#endif
 
 static struct memtype_reserve msm8226_reserve_table[] __initdata = {
 	[MEMTYPE_SMI] = {
@@ -116,6 +138,9 @@ static void __init msm8226_reserve(void)
 	reserve_info = &msm8226_reserve_info;
 	of_scan_flat_dt(dt_scan_for_memory_reserve, msm8226_reserve_table);
 	msm_reserve();
+#ifdef CONFIG_ANDROID_PERSISTENT_RAM
+	persistent_ram_early_init(&per_ram);
+#endif
 }
 
 /*
