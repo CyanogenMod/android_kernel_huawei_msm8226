@@ -261,17 +261,7 @@ static struct notifier_block wnb = {
 	.notifier_call = wcnss_notif_cb,
 };
 
-#ifdef CONFIG_HUAWEI_WIFI
-#define NVBIN_FILE "wlan/prima/WCNSS_hw_wlan_nv.bin"
-#define NVBIN_FILE_3660B "wlan/prima/WCNSS_hw_wlan_nv_3660b.bin"
-#define WLAN_CHIP_QUALCOMM_WCN3660B   "2.4"
-#define WLAN_MAX_CONF_INFO_LEN 128
-#define QUALCOMM_WCN_CALDATA_FORMAT    "../wifi/WCNSS_hw_wlan_nv"
-extern char *get_wifi_device_type(void);
-const void *get_hw_wifi_pubfile_id(void);
-#else
 #define NVBIN_FILE "wlan/prima/WCNSS_qcom_wlan_nv.bin"
-#endif
 
 /*
  * On SMD channel 4K of maximum data can be transferred, including message
@@ -2035,38 +2025,8 @@ static void wcnss_nvbin_dnld(void)
 	unsigned int nv_blob_size = 0;
 	const struct firmware *nv = NULL;
 	struct device *dev = &penv->pdev->dev;
-#ifdef CONFIG_HUAWEI_WIFI
-	char *wifi_device_type = NULL;
-	char *wifi_pubfile_id = NULL;
-	char nvbin_path[WLAN_MAX_CONF_INFO_LEN] = {0};
-	wifi_device_type = get_wifi_device_type();
-	wifi_pubfile_id = (char *)get_hw_wifi_pubfile_id();
-#endif
 	down_read(&wcnss_pm_sem);
-/*wcn3660b use the diff nvbin file*/
-#ifdef CONFIG_HUAWEI_WIFI
-	snprintf(nvbin_path,sizeof(nvbin_path), "%s_%s.bin", QUALCOMM_WCN_CALDATA_FORMAT, wifi_pubfile_id);
-	ret = request_firmware(&nv, nvbin_path, dev);
-	if (ret || !nv || !nv->data || !nv->size)
-	{
-	    if(0 == strncmp(wifi_device_type, WLAN_CHIP_QUALCOMM_WCN3660B, strlen(WLAN_CHIP_QUALCOMM_WCN3660B)))
-	    {
-	        ret = request_firmware(&nv, NVBIN_FILE_3660B, dev);
-	        pr_err("wcnss: %s: firmware_path %s\n",__func__, NVBIN_FILE_3660B);
-	    }
-	    else
-	    {
-	        ret = request_firmware(&nv, NVBIN_FILE, dev);
-	        pr_err("wcnss: %s: firmware_path %s\n",__func__, NVBIN_FILE);
-	    }
-	}
-	else
-	{
-	    pr_err("wcnss: %s: firmware_path %s\n",__func__, nvbin_path);
-	}
-#else
 	ret = request_firmware(&nv, NVBIN_FILE, dev);
-#endif
 	if (ret || !nv || !nv->data || !nv->size) {
 		pr_err("wcnss: %s: request_firmware failed for %s(ret = %d)\n",
 			__func__, NVBIN_FILE, ret);
